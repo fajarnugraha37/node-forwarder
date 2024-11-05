@@ -14,7 +14,7 @@ async function load() {
     if(!process.env.CONFIG_PATH) {
         logger.warn('configuration is not specified, will use default config file')
     }
-    const configPath = process.env.CONFIG_PATH ?? path.resolve(process.env.NODE_ENV ? `config.${process.env.NODE_ENV}.json` : 'config.json');
+    const configPath = process.env.CONFIG_PATH ?? path.resolve(process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}.json` : '.env.json');
     config = JSON.parse((await fs.readFile(configPath)).toString());
 }
 
