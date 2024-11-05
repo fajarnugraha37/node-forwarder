@@ -3,12 +3,23 @@ import path from 'path';
 import { resolveHomeDir } from './util.js';
 import { DotEnvParseOutput, DotEnvPopulateInput, DotEnvConfigOptions, DotEnvConfigOutput } from '../types/config.js';
 
+/**
+ * (?:^|^)\s*: Matches the beginning of a line (either at the beginning of a string or after a newline) followed by whitespace (optional).
+ * (?:export\s+)?: Matches the word "export" followed by whitespace (optional), which is often used to define variables in some scripting languages.
+ * ([\w.-]+): Captures a variable name in a group. This variable consists of letters, numbers, periods, and underscores.
+ * (?:\s*=\s*?|:\s+?): Matches an equal sign (=) or colon (:) used to separate a variable name from its value, with optional whitespace surrounding it.
+ * (\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*(?:\|[^])*|[^#\r\n]+)?: Captures a variable value in a group. This value can be a string enclosed in single, double, or backquotes, or it can be a sequence of characters that does not include spaces, hash marks (#), carriage returns (\r), and line feeds (\n).
+ * \s*(?:#.*)?: Matches optional whitespace followed by a comment (starting with a hash mark).
+ * (?:$|$): Matches the end of a line (either at the end of the string or before a newline).
+ * mg: Modifiers that make the match multi-line (m) and global (g), meaning the regex will search for all occurrences of the pattern in the entire text.
+ */
 const LINE = /(?:^|^)\s*(?:export\s+)?([\w.-]+)(?:\s*=\s*?|:\s+?)(\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*`(?:\\`|[^`])*`|[^#\r\n]+)?\s*(?:#.*)?(?:$|$)/mg;
 
 function parse<T extends DotEnvParseOutput = DotEnvParseOutput>(src: string | Buffer): T {
     const obj: { [key: string]: unknown } = {};
 
     let lines: string = src.toString();
+    // /\r\n?/mg: Matches one or two characters: a carriage return (\r) followed optionally by a line feed (\n). This is often used to replace newlines on various operating systems.
     lines = lines.replace(/\r\n?/mg, '\n');
 
     let match: RegExpExecArray | null;
@@ -20,11 +31,14 @@ function parse<T extends DotEnvParseOutput = DotEnvParseOutput>(src: string | Bu
 
         // Check if double quoted && Remove surrounding quotes
         const maybeQuote = value[0]
+        // /^(['"])([\s\S]*)\1$/mg`: Matches a string enclosed in single, double, or backticks. The inside of the quotes can contain any character, including newlines.
         value = value.replace(/^(['"`])([\s\S]*)\1$/mg, '$2');
 
         // Expand newlines if double quoted
         if (maybeQuote === '"') {
+            // /\\n/g: Matches the newline character (\n) globally.
             value = value.replace(/\\n/g, '\n');
+            // /\\r/g: Matches the carriage return character (\r) globally.
             value = value.replace(/\\r/g, '\r');
         }
 
