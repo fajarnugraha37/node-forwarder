@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { resolveHomeDir } from './util.js';
 import { DotEnvParseOutput, DotEnvPopulateInput, DotEnvConfigOptions, DotEnvConfigOutput } from '../types/config.js';
+import { resolveHomeDir } from '../helper/index.js';
 
 /**
  * (?:^|^)\s*: Matches the beginning of a line (either at the beginning of a string or after a newline) followed by whitespace (optional).

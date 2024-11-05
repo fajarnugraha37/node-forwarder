@@ -1,7 +1,7 @@
 import { normalize as fileNormalize } from "path";
 import { types, InspectOptions } from "util";
-import { formatTemplate } from "../util.js";
-import { ISettings, IStackFrame } from "../../types/index.js";
+import { formatTemplate } from "./fromatter.js";
+import { ISettings, IStackFrame } from "../types/index.js";
 export { InspectOptions };
 
 

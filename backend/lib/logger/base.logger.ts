@@ -1,4 +1,4 @@
-import { formatTemplate, formatNumberAddZeros, urlToObject } from "./util.js";
+import { formatTemplate, formatNumberAddZeros, urlToObject } from "../helper/index.js";
 import { ISettingsParam, ISettings, ILogObjMeta, ILogObj, IErrorObject, IRuntime, IMeta } from "../types/index.js";
 import Runtime from "./node/index.js";
 

@@ -1,7 +1,7 @@
 import { hostname } from "os";
 import { formatWithOptions, InspectOptions } from "util";
-import { getCallerStackFrame } from "./util.js";
-import { ILogObjMeta, IMeta, IMetaStatic, INodeMetaStatic, ISettings } from "../../types/index.js";
+import { getCallerStackFrame } from "../../helper/index.js";
+import { ILogObjMeta, IMeta, INodeMetaStatic, ISettings } from "../../types/index.js";
 export { InspectOptions };
 
 

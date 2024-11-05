@@ -1,12 +1,4 @@
-import path from 'path';
-import os from 'os';
 import crypto from 'crypto';
-
-export function resolveHomeDir<T extends string | string[] | URL>(envPath: T) {
-    return (typeof envPath === 'string') && envPath[0] === '~' 
-        ? path.join(os.homedir(), envPath.slice(1)) 
-        : envPath;
-}
 
 export function decrypt(encrypted: string, keyStr: string): string {
     const key = Buffer.from(keyStr.slice(-64), 'hex');

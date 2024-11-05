@@ -4,8 +4,9 @@ import * as https from 'node:https';
 import * as stream from 'node:stream';
 import * as util from 'node:util';
 import { EventEmitter } from 'node:events';
-import { requestToBody, sendInternalServerError, createTcpServer, TcpServer } from './helper.js';
+import { createTcpServer, TcpServer } from './helper.js';
 import { MiddlewareContainer } from '../middleware/index.js';
+import { requestToBody, sendInternalServerError } from '../helper/index.js';
 
 
 export class RequestForwarderServer extends EventEmitter {
