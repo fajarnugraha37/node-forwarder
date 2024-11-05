@@ -2,6 +2,8 @@ import path from "path";
 import fs from "fs/promises";
 import { ConfigOptions, IConfigServer } from "../types/index.js";
 import { Logger } from "../logger/index.js";
+import { deepmerge } from "../helper/object-merge.js";
+import { defaultConfig } from "./config.defaut.js";
 
 
 // TODO: add validation
@@ -15,7 +17,10 @@ async function load() {
         logger.warn('configuration is not specified, will use default config file')
     }
     const configPath = process.env.CONFIG_PATH ?? path.resolve(process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}.json` : '.env.json');
-    config = JSON.parse((await fs.readFile(configPath)).toString());
+    config = await fs.readFile(configPath)
+        .then(jsonString => jsonString.toString())
+        .then(jsonString => JSON.parse(jsonString))
+        .then(jsonObject => deepmerge(jsonObject, defaultConfig)) 
 }
 
 async function get() {
