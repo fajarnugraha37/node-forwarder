@@ -1,214 +1,98 @@
-import * as net from 'node:net';
 import * as http from 'node:http';
-import * as https from 'node:https';
-import * as stream from 'node:stream';
-import * as util from 'node:util';
-import { EventEmitter } from 'node:events';
-import { createTcpServer, TcpServer } from './helper.js';
-import { MiddlewareContainer } from '../middleware/index.js';
-import { requestToBody, sendInternalServerError } from '../helper/index.js';
+import * as https from "https";
+import * as net from "net";
+import * as fs from "fs";
+import * as path from "path";
+import internal from "stream";
+import { Logger } from '../logger/index.js';
 
 
-export class RequestForwarderServer extends EventEmitter {
-    public readonly server: TcpServer;
-    public readonly onRequest = new MiddlewareContainer<{ 
-        request: http.IncomingMessage, 
-        response: http.ServerResponse & { req: http.IncomingMessage } 
-    }>();
-    public readonly onResponse = new MiddlewareContainer<{ 
-        request: http.IncomingMessage, 
-        response: http.ServerResponse & { req: http.IncomingMessage }, 
-        proxyResponse: http.IncomingMessage 
-    }>();
-    public readonly onConnect = new MiddlewareContainer<{ 
-        request: http.IncomingMessage, 
-        clientSocket: stream.Duplex, 
-        head: Buffer 
-    }>();
+const logger = new Logger({ name: 'core.helper' });
 
-    constructor(
-        public readonly port: number = 8080,
-        public readonly host: string = '0.0.0.0'
-    ) {
-        super();
-        this.server = createTcpServer({
-            onConnect: this.#onConnectProxy(this.port, this.host).bind(this),
-            onRequest: this.#onRequestProxyToHttp.bind(this),
-            // onUpgrade: this.#onRequestProxyToHttp.bind(this),
-            // onError: this.#onRequestProxyToHttp.bind(this),
-            // onClientError: this.#onRequestProxyToHttp.bind(this),
-        });
+export type TcpServer = ReturnType<typeof createTcpServer>;
 
-    }
+export const createTcpServer = (opts: {
+    onConnect: (request: http.IncomingMessage, clientSocket: internal.Duplex, head: Buffer) => void | Promise<void>;
+    onRequest: (protocol: 'http:' | 'https:') => http.RequestListener;
+}) => {
+    const server = {
+        http: http.createServer({
+            keepAlive: true,
+        }),
+        https: https.createServer({
+            cert: fs.readFileSync(path.resolve("localhost.crt")),
+            key: fs.readFileSync(path.resolve("localhost.key")),
+        }),
+        tcp: net.createServer({
+            allowHalfOpen: false,
+            keepAlive: true,
+        }),
+    };
 
-    /**
-     * 
-     * @returns 
-     */
-    public async start(): Promise<this> {
-        process.on("uncaughtException", this.#onError('uncaughtException').bind(this));
-        return new Promise((resolve) => {
-            this.server.tcp.listen({
-                port: this.port,
-                host: this.host,
-            }, () => {
-                console.debug("listen: %o", { port: this.port, pid: process.pid });
-                this.emit("listen", this.port, process.pid, this.server.tcp);
+    server.http.on('connect', opts.onConnect);
+    server.https.on('connect', opts.onConnect);
 
-                resolve(this);
-            });
-        });
-    }
+    server.http.on('request', opts.onRequest('http:'));
+    server.https.on('request', opts.onRequest('https:'));
 
-    /**
-     * 
-     * @returns 
-     */
-    public async stop(): Promise<this> {
-        try {
-            this.server.http.closeAllConnections();
-            this.server.https.closeAllConnections();
-            await util.promisify(this.server.tcp.close.bind(this.server.tcp))(),
-
-            console.debug("Succed to close server ");
-            this.emit("close");
-
-            return this;
-        } catch (err) {
-            console.error("Failed to close server: ", err);
-            throw err;
-        }
-    }
-
-    #onConnectProxy(tcpPort: number, tcpHostname: string) {
-        return (request: http.IncomingMessage, clientSocket: stream.Duplex, head: Buffer): void | Promise<void> => {
-            console.debug('[onConnect] onConnect: ', request.url);
-
-            // const [hostname, port,] = (request.url ?? '').split(':');
-            // const targetServerConnection = net.connect(Number(port), hostname);
-
-            // NOTE: to trick TLS so that the handshake is done with our own server
-            const targetServerConnection = net.connect(tcpPort, tcpHostname);
-
-            targetServerConnection.on('connect', () => {
-                console.debug('[targetServerConnection] Connected to : ', request.url);
-
-                clientSocket.write(
-                    "HTTP/1.1 200 Connection Established\r\n"
+    server.tcp.on('connection', clientSocket => {
+        clientSocket.once('data', buffer => {
+            // Determine if this is an HTTP/S request:
+            // the TLS handshake record header to find the length of the client hello. Format of the record:
+            // - Byte   0       = SSL record type = 22 (SSL3_RT_HANDSHAKE)
+            // - Bytes 1-2      = SSL version (major/minor)
+            // - Bytes 3-4      = Length of data in the record (excluding the header itself).
+            // - Byte   5       = Handshake type
+            // - Bytes 6-8      = Length of data to follow in this record
+            // - Bytes 9-n      = Command-specific data                      
+            //                  The maximum SSL supports is 16384 (16K).
+            // http between 32 < x < 127 at the first byte or at the first line:
+            // - starting with method GET/POST/DELETE/etc but can't rely on that because it can be customized
+            // - separated by spaces is the target url
+            // - separated by a space again is the protocol = HTTP/1.1
+            const firstByte = buffer[0];
+            const isHttps = firstByte == 22;
+            const isHttp = !isHttps
+                && ((32 < firstByte && firstByte < 127) || buffer?.toString()?.split("\n")?.at(0)?.startsWith("HTTP/1.1"));
+            if (!isHttp && !isHttps) {
+                logger.error('[clientSocket] error request unsupported protocol with first byte of header: ', firstByte);
+                return clientSocket.end(
+                    "HTTP/1.1 505 Only HTTP and HTTPS protocols are currently supported\r\n"
                     + "Proxy-agent: Forward-Proxy\r\n"
                     + "\r\n"
                 );
-                targetServerConnection.write(head);
-                if (!request.destroyed && clientSocket.writable) {
-                    targetServerConnection
-                        .pipe(clientSocket)
-                        .on("error", (e) => console.debug("[targetServerConnection] pipe(clientSocket) error: ", e));
-
-                    clientSocket
-                        .pipe(targetServerConnection)
-                        .on("error", (e) => console.debug("[clientSocket] pipe(serverSocket) error: ", e));
-                }
-            })
-
-            targetServerConnection.setTimeout(60_000, () => {
-                console.debug('[targetServerConnection] Timeout: ');
-
-                targetServerConnection.destroy();
-                clientSocket.destroy();
-            });
-
-            targetServerConnection.on('error', (err: Error) => {
-                console.error('[targetServerConnection] Error: ', err);
-
-                clientSocket.destroy();
-            });
-
-            clientSocket.on('error', (err: Error) => {
-                console.error('[clientSocket] Error: ', err);
-
-                targetServerConnection.end();
-            });
-
-            clientSocket.on("destroyed", () => {
-                console.debug("[clientSocket] destroyed: %s %s", request.method, request.url);
-
-                targetServerConnection.end();
-                targetServerConnection.destroy();
-            });
-        }
-    }
-
-    #onRequestProxyToHttp(protocol: 'http:' | 'https:'): http.RequestListener {
-        return (request, response) => {
-            console.log('[onRequestForwardToHttp]: %s with PID %s', request.url, process.pid);
-
-            try {
-                const url = new URL(
-                    request.url?.startsWith('http:')
-                        ? request.url
-                        : `${protocol}//${response.req.headers['x-forwarded-host'] || request.headers.host}${response.req.url}`
-                );
-                delete response.req.headers['host'];
-
-                const forwardRequest = (protocol === 'https:' ? https : http).request(
-                    {
-                        'method': response.req.method ?? 'GET',
-                        'hostname': url.hostname,
-                        'path': url.pathname + url.search,
-                        'agent': new (protocol === 'https:' ? https : http).Agent({
-                        }),
-                        'headers': {
-                            ...response.req.headers,
-                            'referer': url.href,
-                        },
-                    },
-                    async (forwardResponse) => {
-                        try {
-                            response.writeHead(forwardResponse.statusCode || 500, {
-                                ...forwardResponse.headers,
-                                "x-server-name": "Forward-Proxy",
-                            });
-
-                            return response.end(await requestToBody(forwardResponse));
-                        } catch (e) {
-                            return sendInternalServerError(e, response, forwardResponse.headers);
-                        }
-                    });
-
-                forwardRequest.on('timeout', () => {
-                    sendInternalServerError(null, response);
-                    return forwardRequest.destroy();
-                });
-
-                forwardRequest.on('error', (err) => {
-                    return sendInternalServerError(err, response);
-                });
-
-                response.req
-                    .pipe(forwardRequest, { end: true })
-                    .on('error', (e) => sendInternalServerError(e, response));
-            } catch (e) {
-                return sendInternalServerError(e, response);
             }
-        }
-    }
 
+            {
+                // Push the buffer back onto the front of the data stream
+                clientSocket.unshift(buffer);
 
-    #onUpgrade(request: Request, clientSocket: stream.Duplex, head: Buffer) {
-        this.emit("upgrade", request, clientSocket, head);
-        clientSocket.end();
-    }
+                // Emit the socket to the HTTP/HTTPS server
+                const protocol: (keyof typeof server) = isHttps
+                    ? 'https'
+                    : 'http';
+                clientSocket.pause();
+                server[protocol].emit('connection', clientSocket);
 
-    #onError(errorType: 'requestError' | 'serverError' | 'uncaughtException') {
-        return (err: Error, socket?: stream.Duplex) => {
-            console.error(`[${errorType}]: `, err);
-
-            if (socket instanceof stream.Duplex) {
-                this.emit(errorType, err, socket);
-                socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
-            } else {
-                this.emit(errorType, err);
+                // the socket must be resumed asynchronously 
+                // or the socket connection hangs, 
+                // potentially crashing the process
+                process.nextTick(() => clientSocket.resume());
             }
-        }
-    }
+        });
+
+        clientSocket.on('error', error => {
+            logger.error('[clientSocket] error: ', error);
+        });
+
+        clientSocket.on('timeout', () => {
+            logger.error('[clientSocket] Timeout');
+        });
+    });
+
+    server.tcp.on('error', (error) => {
+        logger.error('[tcpServer] error: ', error);
+    });
+
+    return server;
 }
