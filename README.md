@@ -1,7 +1,7 @@
 <h1 align="center">
   <a href="https://github.com/fajarnugraha37/node-forwarder">
     <picture>
-      <img alt="node-forwarder" src="https://raw.githubusercontent.com/fajarnugraha37/node-forwarder/refs/heads/main/docs/logo.webp">
+      <img height="500" alt="node-forwarder" src="https://raw.githubusercontent.com/fajarnugraha37/node-forwarder/refs/heads/main/docs/logo.webp">
     </picture>
   </a>
 </h1>
