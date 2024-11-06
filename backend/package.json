@@ -9,8 +9,8 @@
     "start:dev": "ts-node --esm lib/index.ts",
     "start:prod": "npm run build && node dist/index.js"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "https://github.com/fajarnugraha37",
+  "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.8.6",
     "rimraf": "^6.0.1",
