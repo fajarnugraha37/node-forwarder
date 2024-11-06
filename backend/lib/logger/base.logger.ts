@@ -2,7 +2,6 @@ import { formatTemplate, formatNumberAddZeros, urlToObject } from "../helper/ind
 import { ISettingsParam, ISettings, ILogObjMeta, ILogObj, IErrorObject, IRuntime, IMeta } from "../types/index.js";
 import Runtime from "./node/index.js";
 
-export * from "../logger/index.js";
 export { Runtime };
 
 export class BaseLogger<LogObj> {
