@@ -2,7 +2,7 @@ import { loadDotEnv } from './config.env.js';
 import { configJson } from './config.json.js';
 
 
-export function getConfig() {
+export const configServer = (() => {
     loadDotEnv({
         path: '.env' + (process.env.NODE_ENV ? ('.' + process.env.NODE_ENV) : ''),
         override: true,
@@ -17,4 +17,4 @@ export function getConfig() {
     })();
 
     return selectedConfig;
-}
+})();

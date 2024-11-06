@@ -9,6 +9,7 @@ import { MiddlewareContainer } from '../middleware/index.js';
 import { getTlsSocket, sendInternalServerError, sendJsonResponse } from '../helper/index.js';
 import { ConfigOptions, ConnectContext, IConnectListener, IProxyResponse, IRequest, IRequestContext, IRequestListener, IResponse, IUpgradeListener, ResponseContext } from '../types/index.js';
 import { Logger } from '../logger/index.js';
+import { configServer } from '../config/index.js';
 
 
 export class RequestForwarderServer extends EventEmitter {
@@ -20,15 +21,21 @@ export class RequestForwarderServer extends EventEmitter {
     private readonly server: TcpServer;
     private readonly port: number;
     private readonly host: string;
+    private readonly config: ConfigOptions;
 
-    constructor(public readonly config: ConfigOptions) {
+    constructor(config?: ConfigOptions) {
         super();
-        this.port = config.port;
-        this.host = config.host || '0.0.0.0';
+        if(!config) {
+            this.config = configServer.get();
+        } else {
+            this.config = config;
+        }
+        this.port = this.config.port;
+        this.host = this.config.host || '0.0.0.0';
 
         process.on("uncaughtException", this.#onErrorProxy('uncaughtException').bind(this));
         this.server = createTcpServer({
-            config: config,
+            config: this.config,
             onConnect: this.#onConnectProxy.bind(this),
             onRequest: this.#onRequestProxy.bind(this),
             onUpgrade: this.#onUpgreadeProxy.bind(this),
