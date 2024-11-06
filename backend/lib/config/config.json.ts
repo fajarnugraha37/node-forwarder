@@ -1,5 +1,5 @@
 import path from "path";
-import fs from "fs/promises";
+import fs from "fs";
 import { ConfigOptions, IConfigServer } from "../types/index.js";
 import { Logger } from "../logger/index.js";
 import { deepmerge } from "../helper/object-merge.js";
@@ -12,20 +12,17 @@ import { defaultConfig } from "./config.defaut.js";
 const logger = new Logger({ name: 'ConfigJsonService' });
 let config: ConfigOptions | null = null;
 
-async function load() {
+function load() {
     if(!process.env.CONFIG_PATH) {
         logger.warn('configuration is not specified, will use default config file')
     }
-    const configPath = process.env.CONFIG_PATH ?? path.resolve(process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}.json` : '.env.json');
-    config = await fs.readFile(configPath)
-        .then(jsonString => jsonString.toString())
-        .then(jsonString => JSON.parse(jsonString))
-        .then(jsonObject => deepmerge(jsonObject, defaultConfig)) 
+    const configPath = path.resolve(process.env.CONFIG_PATH || (process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}.json` : '.env.json'));
+    config = deepmerge(JSON.parse(fs.readFileSync(configPath).toString()), defaultConfig);
 }
 
-async function get() {
+function get() {
     if(!config) {
-        await load();
+        load();
     }
 
     return config!;

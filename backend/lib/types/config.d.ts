@@ -8,8 +8,8 @@ export type ConfigOptions = {
 }
 
 export interface IConfigServer {
-    load(): Promise<void>;
-    get(): Promise<ConfigOptions>;
+    load(): void;
+    get(): ConfigOptions;
 }
 
 export interface DotEnvParseOutput {
