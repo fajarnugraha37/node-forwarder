@@ -25,10 +25,14 @@ This project, is currently under development and is not yet ready for use.
     - [X]  Dot Env file
     - [X]  JSON file
     - [ ]  YAML file
+- Middleware Support:
+    - [X]  Custom middleware when request comes (HTTP & HTTPS)
+    - [X]  Custom middleware when response from remote server comes (HTTP & HTTPS)
+    - [X]  Middleware when request CONNECT from client (HTTPS only)
 - Rate Limiting Support: 
-    - [ ]  By IP
-    - [ ]  By Host
-    - [ ]  By path
+    - [ ]  By IP Address
+    - [ ]  By Target Host
+    - [ ]  By Path/URL
 - Whitelisting Support:
     - [ ]  By IP Address
     - [ ]  By Target Host
@@ -36,23 +40,23 @@ This project, is currently under development and is not yet ready for use.
     - [ ]  By IP Address
     - [ ]  By Target Host
 - Caching Support: 
-    - [ ]  LRU cache and TTL for expiration.
-    - [ ]  Automatic Cache Cleanup: Disk-based cache includes automatic deletion of expired cache files
-    - [ ]  custom adapter 
-    - [ ]  in-memory adapter
-    - [ ]  disk adapter
-    - [ ]  compression support
-    - [ ]  pre-fetch scheduling
-    - [ ]  cache invalidation based on content type, URL patterns, or cache-control headers
+    - [ ]  TTL for expiration.
+    - [ ]  In-memory adapter
+    - [ ]  Disk adapter
+    - [ ]  Custom adapter 
+    - [ ]  Automatic Cache Cleanup
+    - [ ]  Compression support
+    - [ ]  Pre-fetch scheduling
+    - [ ]  Cache invalidation based on URL patterns/cache-control headers
 - Monitoring support:
-    - [ ]  logging
+    - [X]  logging
     - [ ]  Trace Header
     - [ ]  Shadowing Request
 - Authentication Support:
-    - [ ]  basic auth
-    - [ ]  api key
-    - [ ]  jwt
-    - [ ]  oauth
+    - [ ]  Basic auth
+    - [ ]  API key
+    - [ ]  JWT
+    - [ ]  OAuth
 - Optimization:
     - [ ]  Request Throttling
     - [ ]  Retry Mechanism
@@ -62,7 +66,7 @@ This project, is currently under development and is not yet ready for use.
     - [ ]  Docker
     - [ ]  Kubernetes
 - Admin Dashboard:
-    - [ ]  Admin page
+    - [ ]  Admin dashboard
     - [ ]  Maintenance Mode
     - [ ]  Dynamic configuration
     - [ ]  Customize error messages
