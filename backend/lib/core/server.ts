@@ -5,23 +5,25 @@ import * as fs from "fs";
 import * as path from "path";
 import internal from "stream";
 import { Logger } from '../logger/index.js';
+import { runWithAls } from '../helper/index.js';
+import { ConfigOptions } from '../types/index.js';
 
-
-const logger = new Logger({ name: 'core.helper' });
 
 export type TcpServer = ReturnType<typeof createTcpServer>;
 
 export const createTcpServer = (opts: {
     onConnect: (request: http.IncomingMessage, clientSocket: internal.Duplex, head: Buffer) => void | Promise<void>;
     onRequest: (protocol: 'http:' | 'https:') => http.RequestListener;
+    config: ConfigOptions,
 }) => {
+    const logger = new Logger({ name: 'tcp.server.' + process.pid });
     const server = {
         http: http.createServer({
             keepAlive: true,
         }),
         https: https.createServer({
-            cert: fs.readFileSync(path.resolve("localhost.crt")),
-            key: fs.readFileSync(path.resolve("localhost.key")),
+            cert: fs.readFileSync(path.resolve(opts.config.ssl?.certPath!)),
+            key: fs.readFileSync(path.resolve(opts.config.ssl?.keyPath!)),
         }),
         tcp: net.createServer({
             allowHalfOpen: false,
@@ -35,8 +37,8 @@ export const createTcpServer = (opts: {
     server.http.on('request', opts.onRequest('http:'));
     server.https.on('request', opts.onRequest('https:'));
 
-    server.tcp.on('connection', clientSocket => {
-        clientSocket.once('data', buffer => {
+    server.tcp.on('connection', (clientSocket: net.Socket) => {
+        clientSocket.once('data', runWithAls(buffer => {
             // Determine if this is an HTTP/S request:
             // the TLS handshake record header to find the length of the client hello. Format of the record:
             // - Byte   0       = SSL record type = 22 (SSL3_RT_HANDSHAKE)
@@ -55,7 +57,7 @@ export const createTcpServer = (opts: {
             const isHttp = !isHttps
                 && ((32 < firstByte && firstByte < 127) || buffer?.toString()?.split("\n")?.at(0)?.startsWith("HTTP/1.1"));
             if (!isHttp && !isHttps) {
-                logger.error('[clientSocket] error request unsupported protocol with first byte of header: ', firstByte);
+                logger.error('Error request unsupported protocol with first byte of header: ', firstByte);
                 return clientSocket.end(
                     "HTTP/1.1 505 Only HTTP and HTTPS protocols are currently supported\r\n"
                     + "Proxy-agent: Forward-Proxy\r\n"
@@ -79,19 +81,19 @@ export const createTcpServer = (opts: {
                 // potentially crashing the process
                 process.nextTick(() => clientSocket.resume());
             }
-        });
+        }));
 
         clientSocket.on('error', error => {
-            logger.error('[clientSocket] error: ', error);
+            logger.error('Client Socket Error: ', error);
         });
 
         clientSocket.on('timeout', () => {
-            logger.error('[clientSocket] Timeout');
+            logger.error('Client Socket Timeout');
         });
     });
 
     server.tcp.on('error', (error) => {
-        logger.error('[tcpServer] error: ', error);
+        logger.error('TCP Server error: ', error);
     });
 
     return server;
