@@ -6,5 +6,7 @@ export const defaultConfig: Required<ConfigOptions> = {
     ssl: {
         certPath: 'cert/localhost.crt',
         keyPath: 'cert/localhost.key',
-    }
+    },
+    name: "Forwarder",
+    requestTimeout: 60000
 }

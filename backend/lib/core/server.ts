@@ -20,8 +20,7 @@ export const createTcpServer = (opts: {
 }) => {
     const logger = new Logger({ name: 'tcp.server.' + process.pid });
     const server = {
-        http: http.createServer({
-        }),
+        http: http.createServer({}),
         https: https.createServer({
             cert: fs.readFileSync(path.resolve(opts.config.ssl?.certPath!)),
             key: fs.readFileSync(path.resolve(opts.config.ssl?.keyPath!)),
@@ -72,7 +71,7 @@ export const createTcpServer = (opts: {
                 logger.error('Error request unsupported protocol with first byte of header: ', firstByte);
                 return clientSocket.end(
                     "HTTP/1.1 505 Only HTTP and HTTPS protocols are currently supported\r\n"
-                    + "Proxy-agent: Forward-Proxy\r\n"
+                    + `Proxy-agent: ${opts.config.name}\r\n`
                     + "\r\n"
                 );
             }

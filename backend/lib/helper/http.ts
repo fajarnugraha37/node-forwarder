@@ -25,7 +25,6 @@ export const sendJsonResponse = (opts: {
         ...(opts.headers || {}),
         ...baseResponseHeaders,
         ...jsonHeaders,
-        ...serverNameHeaders,
     });
 
     return opts.response.end(JSON.stringify({
@@ -56,14 +55,10 @@ export const securityHeaders: Record<string, string> = {
 };
 
 export const jsonHeaders: Record<string, string> = {
-    'content-type': 'application/json',
+    'content-type': 'application/json; charset=utf-8',
 };
 
 export const baseResponseHeaders: Record<string, string> = {
     'cache-control': 'no-cache, no-store, must-revalidate',
     ...securityHeaders,
 };
-
-export const serverNameHeaders: Record<string, string> = {
-    'server': 'Server-Forwarder',
-}

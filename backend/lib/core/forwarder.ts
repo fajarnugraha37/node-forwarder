@@ -6,7 +6,7 @@ import * as util from 'node:util';
 import { EventEmitter } from 'node:events';
 import { createTcpServer, TcpServer } from './server.js';
 import { MiddlewareContainer } from '../middleware/index.js';
-import { getTlsSocket, sendInternalServerError } from '../helper/index.js';
+import { getTlsSocket, sendInternalServerError, sendJsonResponse } from '../helper/index.js';
 import { ConfigOptions, ConnectContext, IConnectListener, IProxyResponse, IRequest, IRequestContext, IRequestListener, IResponse, IUpgradeListener, ResponseContext } from '../types/index.js';
 import { Logger } from '../logger/index.js';
 
@@ -21,7 +21,7 @@ export class RequestForwarderServer extends EventEmitter {
     private readonly port: number;
     private readonly host: string;
 
-    constructor(config: ConfigOptions) {
+    constructor(public readonly config: ConfigOptions) {
         super();
         this.port = config.port;
         this.host = config.host || '0.0.0.0';
@@ -104,7 +104,7 @@ export class RequestForwarderServer extends EventEmitter {
 
                 clientSocket.write(
                     "HTTP/1.1 200 Connection Established\r\n"
-                    + "Proxy-agent: Forward-Proxy\r\n"
+                    + `Proxy-agent: ${this.config.name}\r\n`
                     + "\r\n"
                 );
                 targetServerSocket.write(head);
@@ -121,7 +121,12 @@ export class RequestForwarderServer extends EventEmitter {
                 }
             });
     
-            targetServerSocket.setTimeout(60_000, () => {
+            targetServerSocket.setTimeout(this.config.requestTimeout, () => {
+                clientSocket.write(
+                    "HTTP/1.1 480 Failed to process request in time. Please try again.\r\n"
+                    + `Proxy-agent: ${this.config.name}\r\n`
+                    + "\r\n"
+                );
                 targetServerSocket.destroy();
                 clientSocket.destroy();
             });
@@ -155,7 +160,7 @@ export class RequestForwarderServer extends EventEmitter {
                 await this.onRequestMiddlewares.dispatch({ req: request, res: response });
                 if (request.destroyed || response.writableEnded) {
                     this.logger.debug('[request] Request ended ', url.href);
-                    if(protocol === 'https:' && getTlsSocket()?.destroyed === false) {
+                    if(getTlsSocket()?.destroyed === false) {
                         getTlsSocket()?.end();
                     }
                     return;
@@ -181,9 +186,23 @@ export class RequestForwarderServer extends EventEmitter {
                 forwardRequest.on('error', (err) => request.destroy(err));
 
                 forwardRequest.on('socket', (socket) => {
-                    socket.setTimeout(60_000, () => {
+                    socket.setTimeout(this.config.requestTimeout, () => {
                         this.logger.debug("[forwardRequest] Timeout");
+
                         forwardRequest.destroy();
+                        sendJsonResponse({
+                            response,
+                            statusCode: 480,
+                            payload: {
+                                message: 'Failed to process request in time. Please try again.'
+                            },
+                            headers: {
+                                "server": this.config.name,
+                            },
+                        })
+                        if(protocol === 'https:' && getTlsSocket()?.destroyed === false) {
+                            getTlsSocket()?.end();
+                        }
                     });
 
                     if (forwardRequest.destroyed) {
@@ -210,7 +229,7 @@ export class RequestForwarderServer extends EventEmitter {
                 if (!response.headersSent) {
                     response.writeHead(forwardResponse.statusCode || 200, {
                         ...forwardResponse.headers,
-                        "x-server-name": "Forward-Proxy",
+                        "server": this.config.name,
                     });
                 }
 
@@ -218,7 +237,7 @@ export class RequestForwarderServer extends EventEmitter {
                     stream.Stream.pipeline(forwardResponse, response, (err) => {
                         err && this.logger.error("[forwardResponse->response] Error: ", err);
                     });
-                } else if(protocol === 'https:' && getTlsSocket()?.destroyed === false) {
+                } else if(getTlsSocket()?.destroyed === false) {
                     getTlsSocket()?.end();
                 }
             } catch (e) {
@@ -255,6 +274,10 @@ export class RequestForwarderServer extends EventEmitter {
                 socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
             } else {
                 this.emit(errorType, err);
+            }
+
+            if(getTlsSocket()?.destroyed === false) {
+                getTlsSocket()?.end();
             }
         }
     }

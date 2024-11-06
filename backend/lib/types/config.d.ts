@@ -1,6 +1,8 @@
 export type ConfigOptions = {
+    name: string,
     port: number,
     host?: string,
+    requestTimeout: number
     ssl?: {
         certPath: string,
         keyPath: string,
