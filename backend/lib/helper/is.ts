@@ -6,8 +6,8 @@ export function isMergeableObject(value: any): boolean {
 }
 
 export function isNonNullObject(value: unknown): value is object {
-	return !!value 
-        && typeof value === 'object';
+	return !!value
+		&& typeof value === 'object';
 }
 
 export function isSpecial(value: unknown): boolean {
@@ -16,4 +16,12 @@ export function isSpecial(value: unknown): boolean {
 	return stringValue === '[object RegExp]'
 		|| stringValue === '[object Date]'
 		|| (value as any)?.$$typeof === REACT_ELEMENT_TYPE;
+}
+
+export function isNothing(value: unknown): value is null | undefined {
+	return (typeof value === 'undefined') || (value === null);
+}
+
+export function isNegativeZero(number: unknown) {
+	return (number === 0) && (Number.NEGATIVE_INFINITY === 1 / number);
 }
