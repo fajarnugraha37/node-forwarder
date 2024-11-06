@@ -18,11 +18,12 @@ This project, is currently under development and is not yet ready for use.
 ## Roadmap
 
 - Protocol Support:
-    - [ ]  HTTP
-    - [ ]  HTTPS  
+    - [X]  HTTP
+    - [X]  HTTPS  
     - [ ]  Websocket
 - Configuration support:
-    - [ ]  JSON file
+    - [X]  Dot Env file
+    - [X]  JSON file
     - [ ]  YAML file
 - Rate Limiting Support: 
     - [ ]  By IP
