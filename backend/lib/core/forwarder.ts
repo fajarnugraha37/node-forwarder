@@ -102,7 +102,6 @@ export class RequestForwarderServer extends EventEmitter {
                 ip: (request.headers['x-forwarded-for'] as string)?.split(',').shift()
                     || request.socket?.remoteAddress,
             };
-            console.log('onConnectProxy->locals: ', request.locals);
             await this.onConnectMiddlewares.dispatch({ req: request, clientSocket, head });
             if (request.destroyed || !clientSocket.writable) {
                 this.logger.debug('[onConnectProxy] Request ended ', request.url);
@@ -179,7 +178,6 @@ export class RequestForwarderServer extends EventEmitter {
                     ip: (request.headers['x-forwarded-for'] as string)?.split(',').shift()
                         || request.socket?.remoteAddress,
                 };
-                console.log('onRequestProxy->locals: ', request.locals);
                 await this.onRequestMiddlewares.dispatch({ req: request, res: response });
                 if (request.destroyed || response.writableEnded) {
                     this.logger.debug('[request] Request ended ', url.href);
