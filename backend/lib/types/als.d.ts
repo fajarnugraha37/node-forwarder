@@ -1,0 +1,1 @@
+export type AlsContext = { correlationId: string };

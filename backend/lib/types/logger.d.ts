@@ -15,6 +15,7 @@ export interface IPrettyLogStyles {
     ss?: TStyle;
     ms?: TStyle;
     dateIsoStr?: TStyle;
+    correlationId?: TStyle,
     logLevelName?: TStyle;
     fileName?: TStyle;
     filePath?: TStyle;
@@ -87,6 +88,7 @@ export interface ISettings<LogObj> extends ISettingsParam<LogObj> {
         MM?: TStyle;
         ss?: TStyle;
         ms?: TStyle;
+        correlationId?: TStyle;
         dateIsoStr?: TStyle;
         logLevelName?: TStyle;
         fileName?: TStyle;

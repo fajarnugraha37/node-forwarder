@@ -1,4 +1,4 @@
-import { formatTemplate, formatNumberAddZeros, urlToObject } from "../helper/index.js";
+import { formatTemplate, formatNumberAddZeros, urlToObject, getCollerationId } from "../helper/index.js";
 import { ISettingsParam, ISettings, ILogObjMeta, ILogObj, IErrorObject, IRuntime, IMeta } from "../types/index.js";
 import Runtime from "./node/index.js";
 
@@ -18,7 +18,7 @@ export class BaseLogger<LogObj> {
             minLevel: settings?.minLevel ?? 0,
             argumentsArrayName: settings?.argumentsArrayName,
             hideLogPositionForProduction: settings?.hideLogPositionForProduction ?? false,
-            prettyLogTemplate: settings?.prettyLogTemplate ?? "{{yyyy}}.{{mm}}.{{dd}} {{hh}}:{{MM}}:{{ss}}:{{ms}}\t{{logLevelName}}\t{{filePathWithLine}}{{nameWithDelimiterPrefix}}\t",
+            prettyLogTemplate: settings?.prettyLogTemplate ?? "{{yyyy}}.{{mm}}.{{dd}} {{hh}}:{{MM}}:{{ss}}:{{ms}}{{correlationId}}\t{{logLevelName}}\t{{filePathWithLine}}{{nameWithDelimiterPrefix}}\t",
             prettyErrorTemplate: settings?.prettyErrorTemplate ?? "\n{{errorName}} {{errorMessage}}\nerror stack:\n{{errorStack}}",
             prettyErrorStackTemplate: settings?.prettyErrorStackTemplate ?? "  • {{fileName}}\t{{method}}\n\t{{filePathWithLine}}",
             prettyErrorParentNamesSeparator: settings?.prettyErrorParentNamesSeparator ?? ":",
@@ -37,6 +37,7 @@ export class BaseLogger<LogObj> {
                     FATAL: ["bold", "redBright"],
                 },
                 dateIsoStr: "white",
+                correlationId: "white",
                 filePathWithLine: "white",
                 name: ["white", "bold"],
                 nameWithDelimiterPrefix: ["white", "bold"],
@@ -354,6 +355,8 @@ export class BaseLogger<LogObj> {
         const dateInSettingsTimeZone =
             this.settings.prettyLogTimeZone === "UTC" ? logObjMeta?.date : new Date(logObjMeta?.date?.getTime() - logObjMeta?.date?.getTimezoneOffset() * 60000);
         placeholderValues["rawIsoStr"] = dateInSettingsTimeZone?.toISOString();
+        const correlationId = getCollerationId();
+        placeholderValues["correlationId"] = correlationId ? `\t[${correlationId}]` : '';
         placeholderValues["dateIsoStr"] = dateInSettingsTimeZone?.toISOString().replace("T", " ").replace("Z", "");
         placeholderValues["logLevelName"] = logObjMeta?.logLevelName;
         placeholderValues["fileNameWithLine"] = logObjMeta?.path?.fileNameWithLine ?? "";
