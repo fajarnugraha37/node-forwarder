@@ -75,6 +75,25 @@ This project, is currently under development and is not yet ready for use.
 
 ## Request Flow
 
+### HTTP
+The browser uses plain HTTP (i.e. no TLS). Both forwarding proxies and TLS termination proxies work the same way in this case. 
+Let's assume we've typed http://www.yahoo.com into the browser. Let's forget that we get a 302 redirect in the real world and assume that yahoo.com is available over HTTP.
+The browser makes a TCP connection to the proxy (SYN-SYNACK-ACK) and then sends a GET request to the targeted server:
+
+<img height="500" alt="http-flow" src="https://raw.githubusercontent.com/fajarnugraha37/node-forwarder/refs/heads/main/docs/http-flow.png">
+
+### HTTPS
+
+#### Original HTTPS Flow on Proxy:
+
+<img height="1000" alt="https-original-flow.png" src="https://raw.githubusercontent.com/fajarnugraha37/node-forwarder/refs/heads/main/docs/https-original-flow.png">
+
+#### HTTPS Flow implemented with TLS Termination: 
+
+<img height="1000" alt="https-flow" src="https://raw.githubusercontent.com/fajarnugraha37/node-forwarder/refs/heads/main/docs/https-flow.png">
+
+**NOTE:** This approach is used so that the proxy can read packets sent from the client to the target server with the aim that the proxy can manipulate the packet and implement several features. It should be underlined that this approach has security concerns, **make sure you understand it before using it**.
+
 ## Quick Start
 
 ### Prerequisites
