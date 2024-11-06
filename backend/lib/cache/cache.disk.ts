@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import * as util from 'util';
 import { CacheService, CacheOptions } from '../types/cache.js';
+import { Logger } from '../logger/index.js';
 
 const fsWriteFile = util.promisify(fs.writeFile);
 const fsReadFile = util.promisify(fs.readFile);
@@ -11,6 +12,7 @@ const fsUnlink = util.promisify(fs.unlink);
 const fsAccess = util.promisify(fs.access);
 
 export class DiskCache implements CacheService {
+    private readonly logger = new Logger({ name: DiskCache.name });
     private cleanupTimer: NodeJS.Timeout | null = null;
 
     constructor(public readonly opts: CacheOptions & { type: 'disk' }) {
@@ -77,7 +79,7 @@ export class DiskCache implements CacheService {
                     await fsUnlink(filePath);
                 }
             } catch (err) {
-                console.error(`Error cleaning up cache file ${file}:`, err);
+                this.logger.error(`Error cleaning up cache file ${file}:`, err);
             }
         }
     }

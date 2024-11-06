@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { DotEnvParseOutput, DotEnvPopulateInput, DotEnvConfigOptions, DotEnvConfigOutput } from '../types/config.js';
 import { resolveHomeDir } from '../helper/index.js';
+import { Logger } from '../logger/index.js';
 
 /**
  * (?:^|^)\s*: Matches the beginning of a line (either at the beginning of a string or after a newline) followed by whitespace (optional).
@@ -14,6 +15,7 @@ import { resolveHomeDir } from '../helper/index.js';
  * mg: Modifiers that make the match multi-line (m) and global (g), meaning the regex will search for all occurrences of the pattern in the entire text.
  */
 const LINE = /(?:^|^)\s*(?:export\s+)?([\w.-]+)(?:\s*=\s*?|:\s+?)(\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*`(?:\\`|[^`])*`|[^#\r\n]+)?\s*(?:#.*)?(?:$|$)/mg;
+const logger = new Logger({ name: 'env.parser' });
 
 function parse<T extends DotEnvParseOutput = DotEnvParseOutput>(src: string | Buffer): T {
     const obj: { [key: string]: unknown } = {};
@@ -61,9 +63,9 @@ function populate(processEnv: DotEnvPopulateInput, parsed: DotEnvPopulateInput, 
 
                 if (debug) {
                     if (override === true) {
-                        console.debug(`"${key}" is already defined and WAS overwritten`);
+                        logger.debug(`"${key}" is already defined and WAS overwritten`);
                     } else {
-                        console.debug(`"${key}" is already defined and was NOT overwritten`);
+                        logger.debug(`"${key}" is already defined and was NOT overwritten`);
                     }
                 }
             } else {
@@ -86,7 +88,7 @@ export function loadDotEnv(options?: DotEnvConfigOptions): DotEnvConfigOutput {
         encoding = options.encoding
     } else {
         if (debug) {
-            console.debug('No encoding is specified. UTF-8 is used by default')
+            logger.debug('No encoding is specified. UTF-8 is used by default')
         }
     }
 
@@ -113,7 +115,7 @@ export function loadDotEnv(options?: DotEnvConfigOptions): DotEnvConfigOutput {
             populate(parsedAll, parsed, options)
         } catch (e) {
             if (debug && e instanceof Error) {
-                console.debug(`Failed to load ${path} ${e.message}`)
+                logger.debug(`Failed to load ${path} ${e.message}`)
             }
             lastError = e
         }
