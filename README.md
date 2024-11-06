@@ -6,7 +6,7 @@
   </a>
 </h1>
 <p align="center">
-    <em><b>Node Forwarder</b> A simple, Request forwarder built with Node.js. It includes features like caching, rate limiting, blacklisting, whitelisting, etc. Designed for ease of use, flexible and secure URL management.
+    <em><b>Node Forwarder</b> A simple, Request forwarder built with Node.js. It includes features like caching, rate limiting, blacklisting, whitelisting, etc. Designed for ease of use, and flexible.
     </em>
 </p>
 
