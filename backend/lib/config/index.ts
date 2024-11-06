@@ -4,7 +4,7 @@ import { configJson } from './config.json.js';
 
 export function getConfig() {
     loadDotEnv({
-        path: '.env' + (process.env.NODE_ENV || '.' + process.env.NODE_ENV),
+        path: '.env' + (process.env.NODE_ENV ? ('.' + process.env.NODE_ENV) : ''),
         override: true,
     });
 
