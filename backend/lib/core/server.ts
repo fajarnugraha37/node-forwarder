@@ -3,42 +3,54 @@ import * as https from "https";
 import * as net from "net";
 import * as fs from "fs";
 import * as path from "path";
-import internal from "stream";
 import { Logger } from '../logger/index.js';
-import { runWithAls } from '../helper/index.js';
-import { ConfigOptions } from '../types/index.js';
+import * as als from '../helper/index.js';
+import { ConfigOptions, IConnectListener, IErrorListener, IRequestListener, IUpgradeListener } from '../types/index.js';
 
 
 export type TcpServer = ReturnType<typeof createTcpServer>;
 
 export const createTcpServer = (opts: {
-    onConnect: (request: http.IncomingMessage, clientSocket: internal.Duplex, head: Buffer) => void | Promise<void>;
-    onRequest: (protocol: 'http:' | 'https:') => http.RequestListener;
+    onConnect: (protocol: 'http:' | 'https:') => IConnectListener;
+    onRequest: (protocol: 'http:' | 'https:') => IRequestListener;
+    onUpgrade: (protocol: 'http:' | 'https:') => IUpgradeListener;
+    onError: IErrorListener,
+    onClientError: IErrorListener;
     config: ConfigOptions,
 }) => {
     const logger = new Logger({ name: 'tcp.server.' + process.pid });
     const server = {
         http: http.createServer({
-            keepAlive: true,
         }),
         https: https.createServer({
             cert: fs.readFileSync(path.resolve(opts.config.ssl?.certPath!)),
             key: fs.readFileSync(path.resolve(opts.config.ssl?.keyPath!)),
         }),
         tcp: net.createServer({
-            allowHalfOpen: false,
-            keepAlive: true,
+            allowHalfOpen: true,
         }),
     };
 
-    server.http.on('connect', opts.onConnect);
-    server.https.on('connect', opts.onConnect);
+    server.http.on('connect', opts.onConnect('http:'));
+    server.https.on('connect', opts.onConnect('https:'));
+    
+    server.https.on('connection', als.setSocket.bind(als));
+    server.https.on('secureConnection', als.setTlsSocket.bind(als));
 
     server.http.on('request', opts.onRequest('http:'));
     server.https.on('request', opts.onRequest('https:'));
 
+    server.http.on("upgrade", opts.onUpgrade('http:'));
+    server.https.on("upgrade", opts.onUpgrade('https:'));
+    
+    server.http.on("error", opts.onError);
+    server.https.on("error", opts.onError);
+
+    server.http.on("clientError", opts.onClientError);
+    server.https.on("clientError", opts.onClientError);
+
     server.tcp.on('connection', (clientSocket: net.Socket) => {
-        clientSocket.once('data', runWithAls(buffer => {
+        clientSocket.once('data', als.runWithAls(buffer => {
             // Determine if this is an HTTP/S request:
             // the TLS handshake record header to find the length of the client hello. Format of the record:
             // - Byte   0       = SSL record type = 22 (SSL3_RT_HANDSHAKE)
@@ -84,16 +96,16 @@ export const createTcpServer = (opts: {
         }));
 
         clientSocket.on('error', error => {
-            logger.error('Client Socket Error: ', error);
+            logger.error('[TcpServer->clientSocket] Error: ', error);
         });
 
         clientSocket.on('timeout', () => {
-            logger.error('Client Socket Timeout');
+            logger.error('[TcpServer->clientSocket] Timeout');
         });
     });
 
     server.tcp.on('error', (error) => {
-        logger.error('TCP Server error: ', error);
+        logger.error('[TcpServer] Error: ', error);
     });
 
     return server;

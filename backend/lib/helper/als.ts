@@ -1,6 +1,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import * as crypto from 'node:crypto';
 import { AlsContext } from '../types/index.js';
+import { Duplex } from 'node:stream';
+import { TLSSocket } from 'node:tls';
 
 const asyncLocalStorage = new AsyncLocalStorage<AlsContext>();
 
@@ -22,9 +24,35 @@ function getCollerationId(): string | undefined {
     return store && store.correlationId;
 }
 
+function getSocket(): Duplex | undefined {
+    const store = asyncLocalStorage.getStore();
+    return store && store.socket;
+}
+
+function getTlsSocket(): Duplex | undefined {
+    const store = asyncLocalStorage.getStore();
+    return store && store.tlsSocket;
+}
+function setSocket(socket: Duplex): void {
+    const store = asyncLocalStorage.getStore();
+    if(store) {
+        store.socket = socket;
+    }
+}
+
+function setTlsSocket(socket: TLSSocket): void {
+    const store = asyncLocalStorage.getStore();
+    if(store) {
+        store.tlsSocket = socket;
+    }
+}
 
 export {
     initAls,
     runWithAls,
     getCollerationId,
+    getSocket,
+    getTlsSocket,
+    setSocket,
+    setTlsSocket,
 }

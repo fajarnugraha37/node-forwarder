@@ -6,28 +6,18 @@ import * as util from 'node:util';
 import { EventEmitter } from 'node:events';
 import { createTcpServer, TcpServer } from './server.js';
 import { MiddlewareContainer } from '../middleware/index.js';
-import { requestToBody, sendInternalServerError } from '../helper/index.js';
-import { ConfigOptions } from '../types/index.js';
+import { getTlsSocket, sendInternalServerError } from '../helper/index.js';
+import { ConfigOptions, ConnectContext, IConnectListener, IProxyResponse, IRequest, IRequestContext, IRequestListener, IResponse, IUpgradeListener, ResponseContext } from '../types/index.js';
 import { Logger } from '../logger/index.js';
 
 
 export class RequestForwarderServer extends EventEmitter {
+    public readonly onConnectMiddlewares = new MiddlewareContainer<ConnectContext>();
+    public readonly onRequestMiddlewares = new MiddlewareContainer<IRequestContext>();
+    public readonly onResponseMiddlewares = new MiddlewareContainer<ResponseContext>();
+
     private readonly logger = new Logger({ name: RequestForwarderServer.name });
-    public readonly server: TcpServer;
-    public readonly onRequest = new MiddlewareContainer<{
-        request: http.IncomingMessage,
-        response: http.ServerResponse & { req: http.IncomingMessage }
-    }>();
-    public readonly onResponse = new MiddlewareContainer<{
-        request: http.IncomingMessage,
-        response: http.ServerResponse & { req: http.IncomingMessage },
-        proxyResponse: http.IncomingMessage
-    }>();
-    public readonly onConnect = new MiddlewareContainer<{
-        request: http.IncomingMessage,
-        clientSocket: stream.Duplex,
-        head: Buffer
-    }>();
+    private readonly server: TcpServer;
     private readonly port: number;
     private readonly host: string;
 
@@ -36,14 +26,14 @@ export class RequestForwarderServer extends EventEmitter {
         this.port = config.port;
         this.host = config.host || '0.0.0.0';
 
-        process.on("uncaughtException", this.#onError('uncaughtException').bind(this));
+        process.on("uncaughtException", this.#onErrorProxy('uncaughtException').bind(this));
         this.server = createTcpServer({
             config: config,
             onConnect: this.#onConnectProxy.bind(this),
             onRequest: this.#onRequestProxy.bind(this),
-            // onUpgrade: this.#onRequestProxyToHttp.bind(this),
-            // onError: this.#onRequestProxyToHttp.bind(this),
-            // onClientError: this.#onRequestProxyToHttp.bind(this),
+            onUpgrade: this.#onUpgreadeProxy.bind(this),
+            onError: this.#onErrorProxy('serverError').bind(this),
+            onClientError: this.#onErrorProxy('requestError').bind(this),
         });
 
     }
@@ -94,57 +84,58 @@ export class RequestForwarderServer extends EventEmitter {
      * @param clientSocket 
      * @param head 
      */
-    #onConnectProxy(request: http.IncomingMessage, clientSocket: stream.Duplex, head: Buffer): void | Promise<void> {
-        // NOTE: to trick TLS so that the handshake is done with our own server
-        const targetServerConnection = net.connect(this.port, this.host);
-
-        targetServerConnection.on('connect', () => {
-            this.logger.debug('[targetServerConnection] Receive CONNECT request -> ', request.url);
-
-            clientSocket.write(
-                "HTTP/1.1 200 Connection Established\r\n"
-                + "Proxy-agent: Forward-Proxy\r\n"
-                + "\r\n"
-            );
-            targetServerConnection.write(head);
-            if (!request.destroyed && clientSocket.writable) {
-                targetServerConnection
-                    .pipe(clientSocket)
-                    .on("error", (e) => this.logger.debug("[targetServerConnection] pipe(clientSocket) error: ", e));
-
-                clientSocket
-                    .pipe(targetServerConnection)
-                    .on("error", (e) => this.logger.debug("[clientSocket] pipe(serverSocket) error: ", e));
-
-                this.logger.debug(`[targetServerConnection] Connection Established <- ${this.host}:${this.port}`);
+    #onConnectProxy(protocol: 'http:' | 'https:'): IConnectListener {
+        return async (request, clientSocket, head) => {
+            await this.onConnectMiddlewares.dispatch({ req: request, clientSocket, head });
+            if (request.destroyed || !clientSocket.writable) {
+                this.logger.debug('[onConnectProxy] Request ended ', request.url);
+                return;
             }
-        })
 
-        targetServerConnection.setTimeout(60_000, () => {
-            this.logger.debug('[targetServerConnection] Timeout: ');
+            // NOTE: to trick TLS so that the handshake is done with our own server
+            const targetServerSocket = net.connect({
+                port: this.port,
+                host: this.host,
+                allowHalfOpen: true,
+            });
 
-            targetServerConnection.destroy();
-            clientSocket.destroy();
-        });
+            targetServerSocket.on('connect', () => {
+                this.logger.debug('[targetServerSocket] Receive CONNECT request -> ', request.url);
 
-        targetServerConnection.on('error', (err: Error) => {
-            this.logger.error('[targetServerConnection] Error: ', err);
+                clientSocket.write(
+                    "HTTP/1.1 200 Connection Established\r\n"
+                    + "Proxy-agent: Forward-Proxy\r\n"
+                    + "\r\n"
+                );
+                targetServerSocket.write(head);
+                if (!request.destroyed && clientSocket.writable) {
+                    stream.Stream.pipeline(clientSocket, targetServerSocket, (err) => {
+                        err && this.logger.debug("[clientSocket->targetServerSocket] Error: ", err);
+                    });
+                    
+                    stream.Stream.pipeline(targetServerSocket, clientSocket, (err) => {
+                        err && this.logger.debug("[targetServerSocket->clientSocket] Error: ", err);
+                    });
 
-            clientSocket.destroy();
-        });
+                    this.logger.debug(`[targetServerSocket] Connection Established <- ${this.host}:${this.port}`);
+                }
+            });
+    
+            targetServerSocket.setTimeout(60_000, () => {
+                targetServerSocket.destroy();
+                clientSocket.destroy();
+            });
 
-        clientSocket.on('error', (err: Error) => {
-            this.logger.error('[clientSocket] Error: ', err);
-
-            targetServerConnection.end();
-        });
-
-        clientSocket.on("destroyed", () => {
-            this.logger.debug("[clientSocket] destroyed: %s %s", request.method, request.url);
-
-            targetServerConnection.end();
-            targetServerConnection.destroy();
-        });
+            targetServerSocket.on("error", (err) => {
+                this.logger.error("[targetServerSocket] error", err)
+                clientSocket.end();
+            });
+            
+            clientSocket.on("error", (err) => {
+                this.logger.error("[clientSocket] error", err)
+                targetServerSocket.end();
+            });
+        }
     }
 
     /**
@@ -152,57 +143,87 @@ export class RequestForwarderServer extends EventEmitter {
      * @param protocol 
      * @returns 
      */
-    #onRequestProxy(protocol: 'http:' | 'https:'): http.RequestListener {
-        return (request, response) => {
+    #onRequestProxy(protocol: 'http:' | 'https:'): IRequestListener {
+        return async (request, response) => {
             try {
                 const url = new URL(
                     request.url?.startsWith('http:')
                         ? request.url
                         : `${protocol}//${response.req.headers['x-forwarded-host'] || request.headers.host}${response.req.url}`
                 );
-                delete response.req.headers['host'];
-                this.logger.debug(`[onRequestForwardToHttp] Sending request -> ${url.href}`);
 
-                const forwardRequest = (protocol === 'https:' ? https : http).request(
-                    {
-                        'method': response.req.method ?? 'GET',
-                        'hostname': url.hostname,
-                        'path': url.pathname + url.search,
-                        'agent': new (protocol === 'https:' ? https : http).Agent({
-                        }),
-                        'headers': {
-                            ...response.req.headers,
-                            'referer': url.href,
-                        },
+                await this.onRequestMiddlewares.dispatch({ req: request, res: response });
+                if (request.destroyed || response.writableEnded) {
+                    this.logger.debug('[request] Request ended ', url.href);
+                    if(protocol === 'https:' && getTlsSocket()?.destroyed === false) {
+                        getTlsSocket()?.end();
+                    }
+                    return;
+                }
+
+                this.logger.debug(`[request->forwardRequest] Sending request -> ${url.href}`);
+                delete request.headers['proxy-connection'];
+                delete request.headers['host'];
+                const forwardRequest = (protocol === 'https:' ? https : http).request({
+                    'method': request.method ?? 'GET',
+                    'hostname': url.hostname,
+                    'path': url.pathname + url.search,
+                    'agent': new (protocol === 'https:' ? https : http).Agent({
+                    }),
+                    'headers': {
+                        ...request.headers,
+                        'referer': url.href,
                     },
-                    async (forwardResponse) => {
-                        try {
-                            this.logger.debug(`[onRequestForwardToHttp] Receive response <- ${url.href}`);
-                            response.writeHead(forwardResponse.statusCode || 500, {
-                                ...forwardResponse.headers,
-                                "x-server-name": "Forward-Proxy",
-                            });
+                });
 
-                            return response.end(await requestToBody(forwardResponse));
-                        } catch (e) {
-                            return sendInternalServerError(e, response, forwardResponse.headers);
-                        }
+                forwardRequest.on('response', this.#onResponseProxy(protocol, url, request, response).bind(this));
+
+                forwardRequest.on('error', (err) => request.destroy(err));
+
+                forwardRequest.on('socket', (socket) => {
+                    socket.setTimeout(60_000, () => {
+                        this.logger.debug("[forwardRequest] Timeout");
+                        forwardRequest.destroy();
                     });
 
-                forwardRequest.on('timeout', () => {
-                    sendInternalServerError(null, response);
-                    return forwardRequest.destroy();
-                });
+                    if (forwardRequest.destroyed) {
+                        return;
+                    }
 
-                forwardRequest.on('error', (err) => {
-                    return sendInternalServerError(err, response);
+                    stream.Stream.pipeline(request, forwardRequest, (err) => {
+                        err && this.logger.error("[request->forwardRequest] Error: ", err);
+                    });
                 });
-
-                response.req
-                    .pipe(forwardRequest, { end: true })
-                    .on('error', (e) => sendInternalServerError(e, response));
             } catch (e) {
-                return sendInternalServerError(e, response);
+                this.logger.error('Error: ', e);
+                sendInternalServerError(e, response);
+            }
+        };
+    }
+
+    #onResponseProxy(protocol: 'http:' | 'https:', url: URL, request: IRequest, response: IResponse) {
+        return async (forwardResponse: IProxyResponse) => {
+            try {
+                this.logger.debug(`[onRequestForwardToHttp] Receive response <- ${url.href}`);
+
+                await this.onResponseMiddlewares.dispatch({ req: request, res: response, proxyRes: forwardResponse });
+                if (!response.headersSent) {
+                    response.writeHead(forwardResponse.statusCode || 200, {
+                        ...forwardResponse.headers,
+                        "x-server-name": "Forward-Proxy",
+                    });
+                }
+
+                if (!response.writableEnded) {
+                    stream.Stream.pipeline(forwardResponse, response, (err) => {
+                        err && this.logger.error("[forwardResponse->response] Error: ", err);
+                    });
+                } else if(protocol === 'https:' && getTlsSocket()?.destroyed === false) {
+                    getTlsSocket()?.end();
+                }
+            } catch (e) {
+                this.logger.error('Error: ', e);
+                return sendInternalServerError(e, response, forwardResponse.headers);
             }
         }
     }
@@ -213,9 +234,11 @@ export class RequestForwarderServer extends EventEmitter {
      * @param clientSocket 
      * @param head 
      */
-    #onUpgrade(request: Request, clientSocket: stream.Duplex, head: Buffer) {
-        this.emit("upgrade", request, clientSocket, head);
-        clientSocket.end();
+    #onUpgreadeProxy(protocol: 'http:' | 'https:'): IUpgradeListener {
+        return (request: IRequest, clientSocket: stream.Duplex, head: Buffer) => {
+            this.emit("upgrade", request, clientSocket, head);
+            clientSocket.end();
+        }
     }
 
     /**
@@ -223,7 +246,7 @@ export class RequestForwarderServer extends EventEmitter {
      * @param errorType 
      * @returns 
      */
-    #onError(errorType: 'requestError' | 'serverError' | 'uncaughtException') {
+    #onErrorProxy(errorType: 'requestError' | 'serverError' | 'uncaughtException') {
         return (err: Error, socket?: stream.Duplex) => {
             this.logger.error(`[${errorType}]: `, err);
 
