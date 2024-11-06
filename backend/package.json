@@ -1,12 +1,13 @@
 {
-  "name": "fp",
+  "name": "node-forwarder",
   "version": "0.0.1",
   "description": "",
   "main": "./dist/index.js",
   "type": "module",
   "scripts": {
     "build": "rimraf ./dist && tsc",
-    "start": "npm run build && node dist/index.js"
+    "start:dev": "ts-node --esm lib/index.ts",
+    "start:prod": "npm run build && node dist/index.js"
   },
   "author": "",
   "license": "ISC",
