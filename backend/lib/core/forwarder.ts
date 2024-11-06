@@ -97,7 +97,12 @@ export class RequestForwarderServer extends EventEmitter {
     #onConnectProxy(protocol: 'http:' | 'https:'): IConnectListener {
         return async (request, clientSocket, head) => {
             
-            request.locals = { url: new URL(`https://${request.url}`) };
+            request.locals = { 
+                url: new URL(`https://${request.url}`),
+                ip: (request.headers['x-forwarded-for'] as string)?.split(',').shift()
+                    || request.socket?.remoteAddress,
+            };
+            console.log('onConnectProxy->locals: ', request.locals);
             await this.onConnectMiddlewares.dispatch({ req: request, clientSocket, head });
             if (request.destroyed || !clientSocket.writable) {
                 this.logger.debug('[onConnectProxy] Request ended ', request.url);
@@ -169,7 +174,12 @@ export class RequestForwarderServer extends EventEmitter {
                         : `${protocol}//${response.req.headers['x-forwarded-host'] || request.headers.host}${response.req.url}`
                 );
 
-                request.locals = { url: url};
+                request.locals = { 
+                    url: url,
+                    ip: (request.headers['x-forwarded-for'] as string)?.split(',').shift()
+                        || request.socket?.remoteAddress,
+                };
+                console.log('onRequestProxy->locals: ', request.locals);
                 await this.onRequestMiddlewares.dispatch({ req: request, res: response });
                 if (request.destroyed || response.writableEnded) {
                     this.logger.debug('[request] Request ended ', url.href);

@@ -3,6 +3,7 @@ import stream from 'node:stream';
 
 type IDefaultLocals = {
     url?: URL
+    ip?: string
 }
 export type IRequest<Locals extends { locals?: Record<string, any> } = { locals: IDefaultLocals }> =
     & http.IncomingMessage
