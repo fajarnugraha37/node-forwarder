@@ -1,4 +1,4 @@
-export * from './auth.basic.middleware.js';
+export * from './proxy-auth.middleware.js';
 export * from './auth.jwt.middleware.js';
 export * from './black-list.host.middleware.js';
 export * from './black-list.ip.middleware.js';

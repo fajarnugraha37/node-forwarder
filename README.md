@@ -53,7 +53,7 @@ This project, is currently under development and is not yet ready for use.
     - [ ]  Trace Header
     - [ ]  Shadowing Request
 - Authentication Support:
-    - [ ]  Basic auth
+    - [X]  Proxy auth
     - [ ]  API key
     - [ ]  JWT
     - [ ]  OAuth

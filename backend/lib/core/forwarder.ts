@@ -5,7 +5,7 @@ import * as stream from 'node:stream';
 import * as util from 'node:util';
 import { EventEmitter } from 'node:events';
 import { createTcpServer, TcpServer } from './server.js';
-import { MiddlewareContainer } from '../middleware/index.js';
+import { MiddlewareContainer, proxyAuthMiddleware } from '../middleware/index.js';
 import { getTlsSocket, sendInternalServerError, sendJsonResponse } from '../helper/index.js';
 import { ConfigOptions, ConnectContext, IConnectListener, IProxyResponse, IRequest, IRequestContext, IRequestListener, IResponse, IUpgradeListener, ResponseContext } from '../types/index.js';
 import { Logger } from '../logger/index.js';
@@ -42,7 +42,10 @@ export class RequestForwarderServer extends EventEmitter {
             onError: this.#onErrorProxy('serverError').bind(this),
             onClientError: this.#onErrorProxy('requestError').bind(this),
         });
-
+        if(this.config.auth && 'type' in this.config.auth && this.config.auth.type === 'proxy-auth') {
+            this.onConnectMiddlewares.use(proxyAuthMiddleware(this.config.auth));
+            this.onRequestMiddlewares.use(proxyAuthMiddleware(this.config.auth));
+        }
     }
 
     /**
@@ -93,6 +96,8 @@ export class RequestForwarderServer extends EventEmitter {
      */
     #onConnectProxy(protocol: 'http:' | 'https:'): IConnectListener {
         return async (request, clientSocket, head) => {
+            
+            request.locals = { url: new URL(`https://${request.url}`) };
             await this.onConnectMiddlewares.dispatch({ req: request, clientSocket, head });
             if (request.destroyed || !clientSocket.writable) {
                 this.logger.debug('[onConnectProxy] Request ended ', request.url);
@@ -164,12 +169,11 @@ export class RequestForwarderServer extends EventEmitter {
                         : `${protocol}//${response.req.headers['x-forwarded-host'] || request.headers.host}${response.req.url}`
                 );
 
+                request.locals = { url: url};
                 await this.onRequestMiddlewares.dispatch({ req: request, res: response });
                 if (request.destroyed || response.writableEnded) {
                     this.logger.debug('[request] Request ended ', url.href);
-                    if(getTlsSocket()?.destroyed === false) {
-                        getTlsSocket()?.end();
-                    }
+                    this.#closeTls(protocol);
                     return;
                 }
 
@@ -206,10 +210,8 @@ export class RequestForwarderServer extends EventEmitter {
                             headers: {
                                 "server": this.config.name,
                             },
-                        })
-                        if(protocol === 'https:' && getTlsSocket()?.destroyed === false) {
-                            getTlsSocket()?.end();
-                        }
+                        });
+                        this.#closeTls(protocol);
                     });
 
                     if (forwardRequest.destroyed) {
@@ -217,12 +219,27 @@ export class RequestForwarderServer extends EventEmitter {
                     }
 
                     stream.Stream.pipeline(request, forwardRequest, (err) => {
-                        err && this.logger.error("[request->forwardRequest] Error: ", err);
+                        if(!err) {
+                            return;
+                        }
+                        this.logger.error("[request->forwardRequest] Error: ", err);
+                        sendJsonResponse({
+                            response,
+                            statusCode: 502 ,
+                            payload: {
+                                message: 'Bad Gateway'
+                            },
+                            headers: {
+                                "server": this.config.name,
+                            },
+                        });
+                        this.#closeTls(protocol);
                     });
                 });
             } catch (e) {
                 this.logger.error('Error: ', e);
                 sendInternalServerError(e, response);
+                this.#closeTls(protocol);
             }
         };
     }
@@ -244,8 +261,8 @@ export class RequestForwarderServer extends EventEmitter {
                     stream.Stream.pipeline(forwardResponse, response, (err) => {
                         err && this.logger.error("[forwardResponse->response] Error: ", err);
                     });
-                } else if(getTlsSocket()?.destroyed === false) {
-                    getTlsSocket()?.end();
+                } else {
+                    this.#closeTls(protocol);
                 }
             } catch (e) {
                 this.logger.error('Error: ', e);
@@ -282,10 +299,13 @@ export class RequestForwarderServer extends EventEmitter {
             } else {
                 this.emit(errorType, err);
             }
+            this.#closeTls('https:');
+        }
+    }
 
-            if(getTlsSocket()?.destroyed === false) {
-                getTlsSocket()?.end();
-            }
+    #closeTls(protocol: string) {
+        if(protocol === 'https:' && getTlsSocket()?.destroyed === false) {
+            getTlsSocket()?.end();
         }
     }
 }

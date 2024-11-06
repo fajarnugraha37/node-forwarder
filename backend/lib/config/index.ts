@@ -5,7 +5,6 @@ import { configJson } from './config.json.js';
 export const configServer = (() => {
     loadDotEnv({
         path: '.env' + (process.env.NODE_ENV ? ('.' + process.env.NODE_ENV) : ''),
-        override: true,
     });
 
     const selectedConfig = (() => {

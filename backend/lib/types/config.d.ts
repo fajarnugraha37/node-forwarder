@@ -6,7 +6,11 @@ export type ConfigOptions = {
     ssl?: {
         certPath: string,
         keyPath: string,
-    }
+    },
+    auth: 
+        | { type: 'none'}
+        | { type: 'proxy-auth', username: string, password: string }
+        | {};
 }
 
 export interface IConfigServer {

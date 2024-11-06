@@ -8,5 +8,7 @@ export const defaultConfig: Required<ConfigOptions> = {
         keyPath: 'cert/localhost.key',
     },
     name: "Forwarder",
-    requestTimeout: 60000
+    requestTimeout: 60000,
+    auth: {
+    },
 }

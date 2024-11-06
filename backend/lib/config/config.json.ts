@@ -17,7 +17,12 @@ function load() {
         logger.warn('configuration is not specified, will use default config file')
     }
     const configPath = path.resolve(process.env.CONFIG_PATH || (process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}.json` : '.env.json'));
-    config = deepmerge(JSON.parse(fs.readFileSync(configPath).toString()), defaultConfig);
+    config = JSON.parse(fs.readFileSync(configPath).toString());
+    if(!config) {
+        config = defaultConfig;
+    } else {
+        config = deepmerge(config!, defaultConfig);
+    }
 }
 
 function get() {
