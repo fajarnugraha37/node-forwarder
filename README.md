@@ -73,7 +73,7 @@ This project, is currently under development and is not yet ready for use.
 
 ## Demo
 
-## Architecture
+## Request Flow
 
 ## Quick Start
 
@@ -82,3 +82,49 @@ This project, is currently under development and is not yet ready for use.
 - NPM 9.6.7+
 
 ### Installation
+1. SL/TLS Setup: Generate your SSL certificate and key files (for HTTPS requests). For development, you can create a self-signed certificate:
+```bash
+$ openssl req -x509 -sha256 -nodes -newkey rsa:2048 -days 365 -keyout ./cert/localhost.key -out ./cert/localhost.crt
+```
+2. rename ".env.example" to ".env" and adjust its contents to your environment:
+```.env
+CONFIG_TYPE=json
+CONFIG_PATH=.env.json
+NODE_ENV=local
+```
+3. rename ".env.example.json" to ".env.json" and adjust its contents to your desired configuration:
+```json
+{
+    "port": 9292,
+    "host": "0.0.0.0",
+    "ssl": {
+        "certPath": "cert/localhost.crt",
+        "keyPath": "cert/localhost.key"
+    },
+    "auth":{ 
+        "type": "none"
+    }
+}
+```
+4. Clone the repository:
+```bash
+$ git clone git@github.com:fajarnugraha37/node-forwarder.git
+$ cd ./node-forwarder/backend
+```
+5. Install dependencies:
+```bash
+$ pnpm install
+```
+6. create main file and initiate application as below:
+```typescript
+import { configServer, RequestForwarderServer } from './lib';
+
+main();
+async function main() {
+    const requestForwarder = new RequestForwarderServer(configServer.get());
+    process.addListener('SIGINT', () => requestForwarder.stop());
+    process.addListener('SIGTERM', () => requestForwarder.stop());
+
+    await requestForwarder.start();
+}
+```
